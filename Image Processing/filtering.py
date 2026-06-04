@@ -4,6 +4,7 @@
 import numpy as np
 import cv2 as cv
 import time
+import ColorPalettes
 
 # ============================================================================ #
 # FUNCTIONS #
@@ -44,95 +45,85 @@ def buildColorLUT(colorPallet: np.ndarray, color: str) -> np.ndarray:
     indices = np.argmin(np.abs(channelValues - channelPallet),axis=1)
     return colorPallet[indices]
 
+def buildHSVLUT(colorPallet: np.ndarray) -> np.ndarray:
+    hsvPallet = cv.cvtColor(colorPallet[None, :], cv.COLOR_BGR2HSV)
+
+    huePallet = hsvPallet[0, :, 0]
+    saturationPallet = hsvPallet[0, :, 1]
+    valuePallet = hsvPallet[0, :, 2]
+
+    HSVValues = np.arange(256)[:, None]
+
+    hueIndices = np.argmin(np.abs(HSVValues - huePallet), axis=1)
+    saturationIndices = np.argmin(np.abs(HSVValues - saturationPallet), axis=1)
+    valueIndices = np.argmin(np.abs(HSVValues - valuePallet), axis=1)
+
+    return colorPallet[hueIndices], colorPallet[saturationIndices], colorPallet[valueIndices]
+
+def hsvDiffMetric(image: np.ndarray, lut: tuple, channel: str) -> np.ndarray:
+    hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+    if channel == "H":
+        return lut[0][hsv[:, :, 0]]
+    elif channel == "S":
+        return lut[1][hsv[:, :, 1]]
+    elif channel == "V":
+        return lut[2][hsv[:, :, 2]]
+    else:
+        raise ValueError("Invalid channel specified")
+
 def saveImage(image, filename):
     cv.imwrite(filename, image)
 
+def smoothFilter(image, lut, k_size, filter="gauss", iterations=1):
 
-IMAGE = cv.imread("Image Processing/SheepOG.jpg")
+    quantized = image
 
-# ============================================================================ #
-# COLOR PALLETS #
+    for _ in range(iterations):
+        if filter == "guass":
+            quantized = cv.GaussianBlur(quantized, (k_size, k_size), 0)
+            quantized = brightnessDiffMetric(quantized, lut)
+        if filter == "bilateral":
+            quantized = cv.bilateralFilter(quantized, k_size, 75, 75)
+            quantized = brightnessDiffMetric(quantized, lut)
 
-WOODEN = np.array([
-    [70, 76, 156],
-    [119, 170, 230],
-    [35, 2, 105],
-    [167, 205, 235],
-    [128, 160, 189],
-    [80, 127, 163]
-], dtype=np.uint8)
+    return quantized
 
-NATURAL = np.array([
-    [ 42,  68,  34],
-    [ 78, 132,  76],
-    [115, 158, 102],
-    [ 55,  82, 126],
-    [ 85, 120, 165],
-    [180, 145, 105],
-    [210, 190, 155],
-    [145, 145, 145],
-    [195, 195, 195],
-    [245, 245, 245],
-    [ 30,  26,  22]
-], dtype=np.uint8)
 
-SUNSET_DESERT = np.array([
-    [77, 94, 255],
-    [128, 149, 255],
-    [140, 196, 255],
-    [79, 116, 216],
-    [54, 67, 122],
-    [35, 39, 62]
-], dtype=np.uint8)
 
-DEEP_OCEAN = np.array([
-    [78, 32, 12],
-    [126, 72, 24],
-    [170, 120, 44],
-    [222, 168, 78],
-    [255, 216, 142],
-    [255, 240, 208]
-], dtype=np.uint8)
 
-AUTUMN_FOREST = np.array([
-    [11, 95, 58],
-    [78, 153, 106],
-    [52, 136, 181],
-    [36, 102, 205],
-    [15, 54, 138],
-    [14, 36, 82]
-], dtype=np.uint8)
 
-CYBERPUNK_NEON = np.array([
-    [30, 20, 20],
-    [255, 255, 0],
-    [200, 0, 255],
-    [255, 0, 180],
-    [0, 255, 255],
-    [0, 120, 255]
-], dtype=np.uint8)
 
-VINTAGE_PASTEL = np.array([
-    [189, 214, 234],
-    [219, 225, 201],
-    [214, 196, 173],
-    [181, 182, 216],
-    [181, 223, 245],
-    [167, 150, 138]
-], dtype=np.uint8)
+
+
+
+
+
+
+
+
 
 # ============================================================================ #
 # MAIN #
 
-start_time = time.time()
+IMAGE = cv.imread("Image Processing/SheepOG.jpg")
 
-lut = buildBrightnessLUT(SUNSET_DESERT)
-quantized = brightnessDiffMetric(IMAGE, lut)
+#IMAGE = cv.GaussianBlur(IMAGE, (11, 11), 0)
+#IMAGE = cv.medianBlur(IMAGE, 5)
+#IMAGE = cv.bilateralFilter(IMAGE, 15, 75, 75)
 
-end_time = time.time()
-print(f"Processing time: {end_time - start_time:.4f} seconds")
+lut = buildBrightnessLUT(ColorPalettes.WOODEN)
 
-saveImage(quantized, "Image Processing/QuantizedGreen.png")
+filteredImage = brightnessDiffMetric(IMAGE, lut)
 
-cv.imshow("Quantized", quantized)
+saveImage(filteredImage, "Image Processing/filteredImage.png")
+
+cv.imshow("Quantized", filteredImage)
 cv.waitKey(0)
+
+
+## RESULTS ##
+# Average processing time for the 4K twinPM was around 0.07 seconds (15 fps)
+# Average processing time for SheepOG was 0.0088 seconds (120 fps)
+# The HSV-filtering is kind of bad, as it doesn't seem to seperate the colours well enough
+# The brightness and color filtering are much better.
+# By builing the LUTs, we can achieve very fast processing times, as the filtering is reduced to simple array indexing.
