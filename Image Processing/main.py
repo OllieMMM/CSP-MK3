@@ -94,11 +94,15 @@ class colorMask:
         """
         # Initialize
         boundaryList = []
+
         startPixel = self.objectStart()
+
         if startPixel == None:
             return None
+        
         nextPoint = startPixel
-        borderPixels = np.array([startPixel[0],startPixel[1]], dtype=np.uint16)
+
+        borderPixels = [[startPixel[0],startPixel[1]],]
         
         neighbourPoints = np.array([[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]]) # Coordinates to 8 by search space around pixel being tested.
         
@@ -119,13 +123,11 @@ class colorMask:
             for i, index in enumerate(searchlist):
                 x, y = nextPoint + neighbourPoints[index]
                 if self.data[y, x]:
-                    borderPixels = np.append(borderPixels, [x, y])
+                    borderPixels.append([x, y])
                     nextPoint = [x, y]
                     if nextPoint == startPixel:
-                        LENGTH = len(borderPixels)
-                        x = borderPixels[np.arange(0, LENGTH, step=2)]
-                        y = borderPixels[np.arange(1, LENGTH, step=2)]
-                        self.data[y, x] = False
+                        coords = np.asarray(borderPixels, dtype=np.int16)
+                        self.data[coords[:, 1], coords[:, 0]] = False
                         
                         if len(borderPixels) >= 100:
                         # Update to handle areas as well as lengths
@@ -134,7 +136,7 @@ class colorMask:
                         startPixel = self.objectStart()
                         if startPixel == None:
                             return boundaryList
-                        borderPixels = np.array([startPixel[0], startPixel[1]], dtype=np.uint16)
+                        borderPixels = [[startPixel[0],startPixel[1]],]
                         searchlist = DIR_LUT[4]
                         nextPoint = startPixel
                         break
@@ -147,7 +149,7 @@ class colorMask:
                     if startPixel == None:
                         return boundaryList
                     nextPoint = startPixel
-                    borderPixels = np.array([startPixel[0], startPixel[1]],dtype=np.uint16)
+                    borderPixels = [[startPixel[0],startPixel[1]],]
                     i = 0
                     break
 
@@ -165,8 +167,8 @@ def buildBrightnessLUT(colorPallet):
 def formatPolyline(borderPixels):
     polyline = "<polyline points=\" "
     end = f"\" style=\"fill:None; stroke:red; stroke-width:{0.5}\" />\n"
-    for i in range(0, len(borderPixels),2):
-        polyline += f"{borderPixels[i]},{borderPixels[i+1]} "
+    for coord in borderPixels:
+        polyline += f"{coord[0]},{coord[1]} "
     return polyline + end
 
 
