@@ -82,24 +82,15 @@ class colorMask:
             return None
     
     def nextDir(self, prevDir):
-        """
-        Returns the correct search order given a previous direction for the border tarce algorithm
-        """
-        start_index = (prevDir + 6) % 8
-        return [
-            start_index % 8,
-            (start_index + 1) % 8,
-            (start_index + 2) % 8,
-            (start_index + 3) % 8,
-            (start_index + 4) % 8,
-            (start_index + 5) % 8,
-            (start_index + 6) % 8,
-            (start_index + 7) % 8
-        ]
+        # Placeholder for future direction logic. Return previous direction by default.
+        return prevDir
     
     def borderTrace(self):
         """
         Traces out all the borders in a edge filtered binary Image and returns a list of the
+        |7   0   1|
+        |6   x   2|
+        |5   4   3|
         """
         # Initialize
         boundaryList = []
@@ -108,8 +99,20 @@ class colorMask:
             return None
         nextPoint = startPixel
         borderPixels = np.array([startPixel[0],startPixel[1]], dtype=np.uint16)
-        searchlist = [2,3,4,5,6,7,0,1]
-        neighbourPoints = np.array([[-1,0],[-1,-1],[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1]]) # Coordinates to 8 by search space around pixel being tested.
+        
+        neighbourPoints = np.array([[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]]) # Coordinates to 8 by search space around pixel being tested.
+        
+        DIR_LUT = np.array([
+            [6, 7, 0, 1, 2, 3, 4, 5],
+            [7, 0, 1, 2, 3, 4, 5, 6],
+            [0, 1, 2, 3, 4, 5, 6, 7],
+            [1, 2, 3, 4, 5, 6, 7, 0],
+            [2, 3, 4, 5, 6, 7, 0, 1],
+            [3, 4, 5, 6, 7, 0, 1, 2],
+            [4, 5, 6, 7, 0, 1, 2, 3],
+            [5, 6, 7, 0, 1, 2, 3, 4]])
+        
+        searchlist = DIR_LUT[4]
 
         # Main loop
         while True:
@@ -132,10 +135,10 @@ class colorMask:
                         if startPixel == None:
                             return boundaryList
                         borderPixels = np.array([startPixel[0], startPixel[1]], dtype=np.uint16)
-                        searchlist = [2,3,4,5,6,7,0,1]
+                        searchlist = DIR_LUT[4]
                         nextPoint = startPixel
                         break
-                    searchlist = self.nextDir(index)
+                    searchlist = DIR_LUT[index]
                     i = 0
                     break
                 if i == 7: # Deals with isolated pixels in the image
@@ -166,6 +169,7 @@ def formatPolyline(borderPixels):
         polyline += f"{borderPixels[i]},{borderPixels[i+1]} "
     return polyline + end
 
+
 def svgFileGenerator(fileName, boundaryList, height, width):
     """
     Generates an SVG file of all of the borders given.
@@ -177,27 +181,27 @@ def svgFileGenerator(fileName, boundaryList, height, width):
         file.write("</svg>")
     return None
 
+def scaleFactor(target_mm, imageHeight):
+    return (target_mm / 25.4) * 96 / imageHeight
+
 # Initialization (Create these objects once)
-colors = cp.WOODEN
+colors = cp.DEEP_OCEAN
+FINAL_HEIGHT = 100 # Final image height measured in mm
 
-IMAGE = cv.imread("Image Processing\SheepOG.jpg")
-IMAGE = imageVector(IMAGE)
-
-
+IMAGE = cv.imread("Image Processing\TwinPM.jpg")
+IMAGE = cv.GaussianBlur(IMAGE, (11,11), 50)
+# scale = scaleFactor(87, IMAGE.shape[0])
+scale = 1
+IMAGE = cv.resize(IMAGE, None, fx=scale, fy=scale)
 # Dynamic section, may change, be run multiple times, must be fast!
 start = time.time()
 
+IMAGE = imageVector(IMAGE)
 LUT = buildBrightnessLUT(colors)
-
 IMAGE.greyScale()
-
 IMAGE.colorMatch(LUT)
-
-# Final File generator Section, masks, borders, cleanup, svg gen, export.
 MASK0 = IMAGE.booleanColorMask(colors[2])
-
 MASK0.edgeDetect()
-
 boundaryList = MASK0.borderTrace()
 
 svgFileGenerator("OUTPUT", boundaryList, IMAGE.height, IMAGE.width)
@@ -205,7 +209,9 @@ svgFileGenerator("OUTPUT", boundaryList, IMAGE.height, IMAGE.width)
 process = time.time()
 
 print(f"Time taken: {process - start}s")
-
 cv.imshow("picture", IMAGE.reformat())
 cv.waitKey(0)
 cv.destroyAllWindows()
+
+
+# Runs TwinPM.jpg in 2.0sec
