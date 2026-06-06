@@ -88,6 +88,16 @@ class colorMask:
 
         return [idx % self.width, idx // self.width]
     
+    def contourArea(self, borderPixels):
+        pts = np.asarray(borderPixels)
+
+        x = pts[:, 0]
+        y = pts[:, 1]
+
+        return 0.5 * abs(
+            np.dot(x, np.roll(y, -1))
+            - np.dot(y, np.roll(x, -1))
+        )
     
     def borderTrace(self):
         """
@@ -107,10 +117,9 @@ class colorMask:
         nextPoint_X = startPixel[0]
         nextPoint_Y = startPixel[1]
 
-        borderPixels = [[startPixel[0],startPixel[1]],]
+        borderPixels = [[nextPoint_X,nextPoint_Y],]
         
-        neighbourPoints = np.array([[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]]) # Coordinates to 8 by search space around pixel being tested.
-
+        # Coordinates to 8 by search space around pixel being tested.
         DX = (-1,-1,0,1,1,1,0,-1)
         DY = (0,-1,-1,-1,0,1,1,1)
         
@@ -129,28 +138,40 @@ class colorMask:
         # Main loop
         while True:
             for i, index in enumerate(searchlist):
+                
                 x = nextPoint_X + DX[index]
                 y = nextPoint_Y + DY[index]
+
                 if self.data[y, x]:
+
                     borderPixels.append([x, y])
+
                     nextPoint_X = x
                     nextPoint_Y = y 
+
                     if [x, y] == startPixel:
+
                         coords = np.asarray(borderPixels, dtype=np.int16)
                         self.data[coords[:, 1], coords[:, 0]] = False
                         
-                        if len(borderPixels) >= 100:
-                        # Update to handle areas as well as lengths
+                        # Decide which contours to keep! Based on length and area
+                        if len(borderPixels) >= 60 and self.contourArea(borderPixels) > 350: # Currently scaled to about 5mm
+                            # Min Area = (Max*3.78)^2 pixels^2
+                            # Min Length = Max*pi*3.78 pixels
+                    
                             boundaryList.append(borderPixels)    
 
                         startPixel = self.objectStart(startPixel)
 
                         if startPixel == None:
                             return boundaryList
+                        
                         nextPoint_X = startPixel[0]
                         nextPoint_Y = startPixel[1]
-                        borderPixels = [[startPixel[0],startPixel[1]],]
+
+                        borderPixels = [[nextPoint_X,nextPoint_Y],]
                         searchlist = DIR_LUT[4]
+
                         break
                     
                     searchlist = DIR_LUT[index]
@@ -164,9 +185,11 @@ class colorMask:
                     
                     if startPixel == None:
                         return boundaryList
+                    
                     nextPoint_X = startPixel[0]
                     nextPoint_Y = startPixel[1]
-                    borderPixels = [[startPixel[0],startPixel[1]],]
+
+                    borderPixels = [[nextPoint_X,nextPoint_Y],]
                     i = 0
                     break
 
@@ -181,7 +204,7 @@ def buildBrightnessLUT(colorPallet):
     return colorPallet[indices]
     
 
-def formatPolyline(borderPixels):
+def formatPolyline(borderPixels, color):
     polyline = "<polyline points=\" "
     end = f"\" style=\"fill:None; stroke:red; stroke-width:{0.5}\" />\n"
     for coord in borderPixels:
@@ -195,8 +218,8 @@ def svgFileGenerator(fileName, boundaryList, height, width):
     """
     with open(fileName + ".svg", "w+") as file:
         file.write(f"<svg height=\"{height}\" width=\"{width}\" xmlns=\"http://www.w3.org/2000/svg\">\n")
-        for points in boundaryList:
-            file.write(formatPolyline(points))
+        for borderPixels in boundaryList:
+            file.write(formatPolyline(borderPixels, colors[3]))
         file.write("</svg>")
     return None
 
@@ -204,13 +227,14 @@ def scaleFactor(target_mm, imageHeight):
     return (target_mm / 25.4) * 96 / imageHeight
 
 # Initialization (Create these objects once)
-colors = cp.DEEP_OCEAN
+colors = cp.WOODEN
 FINAL_HEIGHT = 100 # Final image height measured in mm
+MAX_RES = 5 # 5mm maximum resolution
 
 IMAGE = cv.imread("Image Processing\TwinPM.jpg")
 IMAGE = cv.GaussianBlur(IMAGE, (11,11), 50)
-# scale = scaleFactor(87, IMAGE.shape[0])
-scale = 1
+scale = scaleFactor(100, IMAGE.shape[0])
+# scale = 1
 IMAGE = cv.resize(IMAGE, None, fx=scale, fy=scale)
 # Dynamic section, may change, be run multiple times, must be fast!
 start = time.time()
@@ -219,15 +243,15 @@ IMAGE = imageVector(IMAGE)
 LUT = buildBrightnessLUT(colors)
 IMAGE.greyScale()
 IMAGE.colorMatch(LUT)
-MASK0 = IMAGE.booleanColorMask(colors[2])
+MASK0 = IMAGE.booleanColorMask(colors[0])
 MASK0.edgeDetect()
 boundaryList = MASK0.borderTrace()
 
-print(f"Total edge pixels = {sum(len(x) for x in boundaryList)}")
 
 svgFileGenerator("OUTPUT", boundaryList, IMAGE.height, IMAGE.width)
 
 process = time.time()
+
 
 print(f"Time taken: {process - start}s")
 cv.imshow("picture", IMAGE.reformat())
@@ -235,4 +259,5 @@ cv.waitKey(0)
 cv.destroyAllWindows()
 
 
-# Runs TwinPM.jpg in 2.0sec
+# RNow uns TwinPM.jpg in 0.5sec 
+# Depends on color and scale ofc.
