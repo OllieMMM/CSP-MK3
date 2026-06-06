@@ -74,16 +74,20 @@ class colorMask:
 
         self.data = np.reshape(output, (self.height, self.width))
 
-    def objectStart(self):
-        if np.any(self.data):
-            index = np.argmax(self.data)
-            return [index%self.width, index//self.width]
-        else:
+    def objectStart(self, prevStart):
+        start_idx = prevStart[1] * self.width + prevStart[0] + 1
+
+        remaining = self.data.ravel()[start_idx:]
+
+        idx = np.argmax(remaining)
+
+        if not remaining[idx]:
             return None
+
+        idx += start_idx
+
+        return [idx % self.width, idx // self.width]
     
-    def nextDir(self, prevDir):
-        # Placeholder for future direction logic. Return previous direction by default.
-        return prevDir
     
     def borderTrace(self):
         """
@@ -95,7 +99,7 @@ class colorMask:
         # Initialize
         boundaryList = []
 
-        startPixel = self.objectStart()
+        startPixel = self.objectStart([-1, 0])
 
         if startPixel == None:
             return None
@@ -133,7 +137,7 @@ class colorMask:
                         # Update to handle areas as well as lengths
                             boundaryList.append(borderPixels)    
 
-                        startPixel = self.objectStart()
+                        startPixel = self.objectStart(startPixel)
                         if startPixel == None:
                             return boundaryList
                         borderPixels = [[startPixel[0],startPixel[1]],]
@@ -145,7 +149,7 @@ class colorMask:
                     break
                 if i == 7: # Deals with isolated pixels in the image
                     self.data[startPixel[1], startPixel[0]] = False
-                    startPixel = self.objectStart()
+                    startPixel = self.objectStart(startPixel)
                     if startPixel == None:
                         return boundaryList
                     nextPoint = startPixel
