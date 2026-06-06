@@ -91,7 +91,7 @@ class colorMask:
     
     def borderTrace(self):
         """
-        Traces out all the borders in a edge filtered binary Image and returns a list of the
+        Traces out all the borders in a edge filtered binary Image and returns a list of the directions taken
         |7   0   1|
         |6   x   2|
         |5   4   3|
@@ -104,11 +104,15 @@ class colorMask:
         if startPixel == None:
             return None
         
-        nextPoint = startPixel
+        nextPoint_X = startPixel[0]
+        nextPoint_Y = startPixel[1]
 
         borderPixels = [[startPixel[0],startPixel[1]],]
         
         neighbourPoints = np.array([[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]]) # Coordinates to 8 by search space around pixel being tested.
+
+        DX = (-1,-1,0,1,1,1,0,-1)
+        DY = (0,-1,-1,-1,0,1,1,1)
         
         DIR_LUT = np.array([
             [6, 7, 0, 1, 2, 3, 4, 5],
@@ -125,11 +129,13 @@ class colorMask:
         # Main loop
         while True:
             for i, index in enumerate(searchlist):
-                x, y = nextPoint + neighbourPoints[index]
+                x = nextPoint_X + DX[index]
+                y = nextPoint_Y + DY[index]
                 if self.data[y, x]:
                     borderPixels.append([x, y])
-                    nextPoint = [x, y]
-                    if nextPoint == startPixel:
+                    nextPoint_X = x
+                    nextPoint_Y = y 
+                    if [x, y] == startPixel:
                         coords = np.asarray(borderPixels, dtype=np.int16)
                         self.data[coords[:, 1], coords[:, 0]] = False
                         
@@ -138,21 +144,28 @@ class colorMask:
                             boundaryList.append(borderPixels)    
 
                         startPixel = self.objectStart(startPixel)
+
                         if startPixel == None:
                             return boundaryList
+                        nextPoint_X = startPixel[0]
+                        nextPoint_Y = startPixel[1]
                         borderPixels = [[startPixel[0],startPixel[1]],]
                         searchlist = DIR_LUT[4]
-                        nextPoint = startPixel
                         break
+                    
                     searchlist = DIR_LUT[index]
                     i = 0
                     break
+
                 if i == 7: # Deals with isolated pixels in the image
+
                     self.data[startPixel[1], startPixel[0]] = False
                     startPixel = self.objectStart(startPixel)
+                    
                     if startPixel == None:
                         return boundaryList
-                    nextPoint = startPixel
+                    nextPoint_X = startPixel[0]
+                    nextPoint_Y = startPixel[1]
                     borderPixels = [[startPixel[0],startPixel[1]],]
                     i = 0
                     break
@@ -209,6 +222,8 @@ IMAGE.colorMatch(LUT)
 MASK0 = IMAGE.booleanColorMask(colors[2])
 MASK0.edgeDetect()
 boundaryList = MASK0.borderTrace()
+
+print(f"Total edge pixels = {sum(len(x) for x in boundaryList)}")
 
 svgFileGenerator("OUTPUT", boundaryList, IMAGE.height, IMAGE.width)
 
